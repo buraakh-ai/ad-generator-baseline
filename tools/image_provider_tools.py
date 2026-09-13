@@ -1,8 +1,10 @@
-"""Per-provider background-image generation calls (OpenAI only), plus the
-dispatcher that picks the active provider (from image_config.json via
-core.image_models) and reports which provider to fall forward to if it
-fails. Retry counts come from settings.max_image_attempts instead of a
-hardcoded loop bound."""
+"""Per-provider full-poster image generation calls (OpenAI only — the
+model draws the whole ad, including headline/CTA/icon text, directly; see
+skills/image_compositing_skill.py for how the prompt describing that
+poster gets built), plus the dispatcher that picks the active provider
+(from image_config.json via core.image_models) and reports which provider
+to fall forward to if it fails. Retry counts come from
+settings.max_image_attempts instead of a hardcoded loop bound."""
 from io import BytesIO
 
 import requests
@@ -21,17 +23,31 @@ class ProviderFailedError(Exception):
 
 
 def _generate_openai_image(prompt: str, api_key: str = "", model: str = None) -> Image.Image:
-    """OpenAI's current best-quality image model (gpt-image-1) via the
-    Images API."""
+    """gpt-image-2.5-sunburst / gpt-image-1 via the Images API — both draw
+    the full poster (headline, bullets, CTA button, icons) directly rather
+    than a plain photo, so `quality: "high"` matters here for legible
+    typography; both models accept it.
+
+    Size matters more than usual here too: skills/image_compositing_skill.py
+    center-crops whatever comes back to a fixed 4:5 (TARGET_W/TARGET_H =
+    1080x1350), and since the poster's own headline/CTA/bullets now run
+    right up to the model's own canvas edges, a mismatched aspect ratio
+    crops real content off — this is what "1024x1536" (2:3) did to gpt-image-
+    1's output before this fix. gpt-image-2+ accepts arbitrary custom sizes,
+    so we ask for 1024x1280 (exactly 4:5, no crop at all); gpt-image-1 only
+    accepts a handful of fixed presets (no custom sizes), so it gets the
+    closest preset instead and still takes some crop loss — a known
+    limitation of that fallback tier, not of the primary model."""
     key = api_key or settings.openai_api_key
     if not key:
         raise Exception("OpenAI image generation requires OPENAI_API_KEY")
     model = model or settings.openai_image_model
+    size = "1024x1280" if model.startswith("gpt-image-2") else "1024x1536"
     r = requests.post(
         "https://api.openai.com/v1/images/generations",
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={"model": model, "prompt": prompt[:4000], "n": 1, "size": "1024x1536"},
-        timeout=120,
+        json={"model": model, "prompt": prompt[:4000], "n": 1, "size": size, "quality": "high"},
+        timeout=180,
     )
     if r.status_code != 200:
         raise Exception(f"OpenAI {model} {r.status_code}: {r.text[:200]}")
@@ -43,6 +59,10 @@ def _generate_openai_image(prompt: str, api_key: str = "", model: str = None) ->
 
 
 def _generate_openai_dalle3(prompt: str, api_key: str = "") -> Image.Image:
+    """Last-resort fallback. DALL-E 3 predates gpt-image's native text
+    rendering and reliably garbles poster text/logos — this tier exists so
+    the app still produces *an* image if both gpt-image tiers are down, not
+    because it can replicate the poster style."""
     key = api_key or settings.openai_api_key
     if not key:
         raise Exception("OpenAI DALL-E 3 requires OPENAI_API_KEY")
@@ -50,7 +70,7 @@ def _generate_openai_dalle3(prompt: str, api_key: str = "") -> Image.Image:
         "https://api.openai.com/v1/images/generations",
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         json={
-            "model": settings.openai_fallback_image_model, "prompt": prompt[:4000],
+            "model": settings.openai_last_resort_image_model, "prompt": prompt[:4000],
             "n": 1, "size": "1024x1792", "response_format": "url",
         },
         timeout=120,
@@ -62,6 +82,9 @@ def _generate_openai_dalle3(prompt: str, api_key: str = "") -> Image.Image:
 
 _PROVIDER_FUNCS = {
     "openai_image": _generate_openai_image,
+    "openai_image_fallback": lambda prompt, api_key: _generate_openai_image(
+        prompt, api_key, model=settings.openai_fallback_image_model
+    ),
     "openai_dalle3": _generate_openai_dalle3,
 }
 

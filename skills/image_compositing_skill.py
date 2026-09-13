@@ -1,29 +1,35 @@
-"""Image-prompt building + PIL compositing (text overlay, logo chip,
-gradient scrim). The compositing side is pure deterministic logic, ported
-from the original image_generator.py. The prompt-building side asks
-gpt-4o-mini for a campaign-specific background-scene description
-(_build_ai_scene, via core/model_router.py) and falls back to the
-deterministic keyword-matched scene library below (_template_scene) if that
-call fails for any reason — same "try the LLM, fall back to a plain-logic
-default" pattern used throughout skills/. The wrapper *template* around the
-scene — the fixed "photorealistic, no people, no text, full bleed" quality
-constraints — lives in prompts/image_prompt.yaml so it's editable without
-touching code; the scene/style lookup tables below are data, not prompts,
-so they stay in Python. Used by agents/image_agent.py."""
+"""Full-poster prompt building + light PIL finishing (logo stamp, Instagram
+UI-preview chrome). The image model (gpt-image-2.5-sunburst by default, see
+tools/image_provider_tools.py) now draws the ENTIRE poster itself —
+headline, supporting copy, benefit bullets, CTA button, icons, layout — in
+one shot, rather than a plain background photo that gets a PIL text overlay
+afterward. _build_ai_poster_prompt() asks the high-tier text model
+(settings.openai_high_end_text_model, via core/model_router.py) to write
+that detailed poster brief and falls back to a
+simpler deterministic poster template (_template_scenes() + _tone_to_style()
+below, wrapped in a plain f-string) if that call fails for any reason — same
+"try the LLM, fall back to plain logic" pattern used throughout skills/.
+Because the poster's own text is now AI-drawn, the PIL compositing side no
+longer overlays a headline/company-name — it only stamps the real fetched
+logo (the model can't reproduce an exact brand mark) and, for the "display"
+variant, simulates Instagram's own post-UI chrome (profile row, Follow
+button, caption preview) around the finished poster. Used by
+agents/image_agent.py."""
 import os
 import random
-import textwrap
 from io import BytesIO
 
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from core.prompt_loader import load_prompt, render
+from core.prompt_loader import render
 
 TARGET_W, TARGET_H = 1080, 1350
 
 # ---------------------------------------------------------------------------
-# Scene / style library
+# Scene / style library — used as loose backdrop/style inspiration fed to the
+# AI poster-prompt writer, and as the deterministic fallback if that call
+# fails.
 # ---------------------------------------------------------------------------
 
 INDUSTRY_SCENES = {
@@ -130,70 +136,140 @@ def _tone_to_style(brand_tone):
 
 
 # ---------------------------------------------------------------------------
-# Prompt builder — wrapper template lives in prompts/image_prompt.yaml,
-# the {scene} slot is AI-generated (prompts/image_scene.yaml) with a
-# deterministic fallback if that call fails.
+# Prompt builder — asks gpt-4o-mini to write the full poster brief
+# (prompts/image_poster_prompt.yaml), falling back to a plain deterministic
+# poster template if that call fails.
 # ---------------------------------------------------------------------------
 
-def _build_ai_scene(company_name, instagram_copy, event_context, company_details, image_headline):
-    """Asks gpt-4o-mini for a campaign-specific background-scene
-    description. Raises on any failure — build_image_prompt() catches it
-    and falls back to _template_scenes()."""
+def _build_ai_poster_prompt(company_name, instagram_copy, event_context, company_details, image_headline,
+                             has_real_branding=False, contact_url=""):
+    """Asks the high-tier text model (settings.openai_high_end_text_model —
+    this benefits from more creative firepower, not the cheap/fast "low"
+    tier) for a complete poster-design brief — headline, bullets, CTA,
+    colors, layout — for the image model to render directly. Raises on any
+    failure — build_image_prompt() catches it and falls back to a
+    deterministic template."""
     from core.agno_models import build_agno_agent
     from core.model_router import generate_text
     from skills.event_selection_skill import GENERIC_EVENT_FALLBACK
 
     # The vague "no real event found" fallback isn't something to
     # visualize literally — treat it the same as no event at all, so the
-    # model grounds the scene in the company/brand instead of drifting
-    # toward generic "current events" imagery (which tends to read as a
-    # bland corporate/news scene, not an actual creative choice).
+    # model grounds the poster in the company/brand instead of drifting
+    # toward generic "current events" imagery.
     has_real_event = bool(event_context and event_context.strip() and event_context.strip() != GENERIC_EVENT_FALLBACK)
     event_for_prompt = event_context if has_real_event else "(none)"
 
+    backdrop_hint = random.choice(_template_scenes(
+        event_context, instagram_copy, company_details.get("services", ""), company_name,
+    ))
+
+    branding_note = (
+        "A real company logo and a real photo of a team member will be added afterward in the top-right and "
+        "top-left corners. Leave those two corners as plain, uncluttered background only — no logo, no wordmark, "
+        "no icons, and absolutely no placeholder text or labels there (do not write things like \"logo here\" or "
+        "\"photo here\" — leave the space genuinely empty, just background). You may still name the company "
+        "elsewhere, in the headline or body copy."
+        if has_real_branding else
+        "No real logo/photo will be added afterward — design a wordmark/logo-style treatment of the company name "
+        "yourself, near the top."
+    )
+
+    cta_note = (
+        f"Do NOT draw anything shaped like a button for the call to action — no pill shape, no rounded rectangle, "
+        f"no colored background box, no border, no arrow icon next to it. A generated image can't actually be "
+        f"clickable on social media, so anything that LOOKS tappable is misleading, even if the text on it is "
+        f"real. Instead, near the bottom, place a short call-to-action line (e.g. \"Book your free "
+        f"consultation:\") followed immediately by this exact URL, both sitting directly on the background like a "
+        f"plain caption/footer line — small, clean, legible text only, no shape or container around it "
+        f"whatsoever: {contact_url}"
+        if contact_url else
+        "Include a clear call-to-action button/label with real button-like text (e.g. \"Book Your Consultation "
+        "Today\", \"Shop Now\", \"Learn More\")."
+    )
+
     system_prompt, user_prompt = render(
-        "image_scene",
+        "image_poster_prompt",
         company_name=company_name,
         what_they_do=company_details.get("what_they_do", ""),
+        services=company_details.get("services", ""),
+        key_values=company_details.get("key_values", ""),
+        tagline=company_details.get("tagline", ""),
         brand_tone=company_details.get("brand_tone", "professional"),
         event_context=event_for_prompt,
         image_headline=image_headline,
         instagram_copy=instagram_copy,
+        backdrop_hint=backdrop_hint,
+        branding_note=branding_note,
+        cta_note=cta_note,
     )
     try:
-        agent = build_agno_agent(complexity="low", instructions=system_prompt)
+        agent = build_agno_agent(complexity="high", instructions=system_prompt)
         result = agent.run(user_prompt)
         raw = getattr(result, "content", None) or str(result)
     except Exception as e:
         print(f"[image] Agno path unavailable ({e}) — using model_router fallback")
-        raw = generate_text(user_prompt, system_prompt, complexity="low")
-    scene = raw.strip().strip('"').strip("'").rstrip(". ").strip()
-    if not scene:
-        raise ValueError("empty scene description")
-    return scene
+        raw = generate_text(user_prompt, system_prompt, complexity="high")
+    poster_prompt = raw.strip().strip('"').strip("'").strip()
+    if not poster_prompt:
+        raise ValueError("empty poster prompt")
+    return poster_prompt
 
 
-def build_image_prompt(company_name, instagram_copy, event_context, company_details, config, image_headline=""):
-    if config.get("override_prompt", "").strip():
-        return config["override_prompt"].strip()
-
+def _fallback_poster_prompt(company_name, instagram_copy, event_context, company_details, image_headline,
+                             has_real_branding=False, contact_url=""):
+    """Deterministic poster prompt used only if the AI poster-prompt writer
+    fails outright. Simpler than the AI version (no invented bullets/CTA
+    copy) but still asks the image model to draw the headline directly, so
+    a degraded run still produces a finished-looking poster instead of a
+    plain textless photo."""
     services = company_details.get("services", "")
     brand_tone = company_details.get("brand_tone", "professional")
     style = _tone_to_style(brand_tone)
+    scene = random.choice(_template_scenes(event_context, instagram_copy, services, company_name))
+    headline_part = f"Bold headline text reading exactly \"{image_headline}\"." if image_headline.strip() else ""
+    branding_part = (
+        "Leave the top-right and top-left corners visually clear (a real logo and a real photo get added there "
+        "afterward) and do not draw your own logo/wordmark."
+        if has_real_branding else
+        f"The company name \"{company_name}\" appears as a clean wordmark near the top."
+    )
+    cta_part = (
+        f"Near the bottom, in small plain text (no button graphic — a generated image can't actually be "
+        f"clickable), include: {contact_url}"
+        if contact_url else
+        "A clear call-to-action button near the bottom."
+    )
+    return (
+        f"A finished vertical advertising poster for {company_name}, set against {scene}. "
+        f"{headline_part} {branding_part} "
+        f"{cta_part} {style}. "
+        "Clean modern commercial graphic-design layout, sharp legible typography, high contrast, "
+        "no real human faces or photoreal people, full bleed edge-to-edge."
+    )
+
+
+def build_image_prompt(company_name, instagram_copy, event_context, company_details, config, image_headline="",
+                        has_real_branding=False, contact_url=""):
+    if config.get("override_prompt", "").strip():
+        return config["override_prompt"].strip()
 
     try:
-        scene = _build_ai_scene(company_name, instagram_copy, event_context, company_details, image_headline)
-        print(f"[image] AI-generated scene: {scene[:160]}...")
+        poster_prompt = _build_ai_poster_prompt(
+            company_name, instagram_copy, event_context, company_details, image_headline,
+            has_real_branding=has_real_branding, contact_url=contact_url,
+        )
+        print(f"[image] AI-generated poster prompt: {poster_prompt[:200]}...")
     except Exception as e:
-        print(f"[image] AI scene generation failed ({e}) — using template fallback")
-        scene = random.choice(_template_scenes(event_context, instagram_copy, services, company_name))
-
-    template = load_prompt("image_prompt")
-    core = template.get("core", "").strip().format(scene=scene, style=style)
+        print(f"[image] AI poster-prompt generation failed ({e}) — using template fallback")
+        poster_prompt = _fallback_poster_prompt(
+            company_name, instagram_copy, event_context, company_details, image_headline,
+            has_real_branding=has_real_branding, contact_url=contact_url,
+        )
 
     prefix = config.get("prompt_prefix", "").strip()
     suffix = config.get("prompt_suffix", "").strip()
-    return " ".join(p for p in [prefix, core, suffix] if p)
+    return " ".join(p for p in [prefix, poster_prompt, suffix] if p)
 
 
 # ---------------------------------------------------------------------------
@@ -221,19 +297,36 @@ def _font(name, size):
     return ImageFont.load_default()
 
 
-def fetch_logo(logo_url):
-    if not logo_url or not logo_url.startswith("http"):
+def _fetch_remote_image(url, label="image"):
+    if not url or not url.startswith("http"):
         return None
     try:
-        r = requests.get(logo_url, timeout=10)
+        r = requests.get(url, timeout=10)
         if r.status_code == 200:
             return Image.open(BytesIO(r.content)).convert("RGBA")
     except Exception as e:
-        print(f"[logo] {e}")
+        print(f"[{label}] {e}")
     return None
 
 
-def _frosted_chip(canvas_rgba, logo_thumb, cx, cy, cw, ch, pad=12, radius=12):
+def fetch_logo(logo_url):
+    return _fetch_remote_image(logo_url, label="logo")
+
+
+def fetch_ceo_photo(photo_url):
+    """Fetches a real, configured photo of a real person (settings.
+    brand_ceo_photo_url) — never AI-generated or described in a prompt, so
+    the poster shows the actual person rather than a fabricated likeness."""
+    return _fetch_remote_image(photo_url, label="ceo-photo")
+
+
+def _frosted_card_bg(canvas_rgba, cx, cy, cw, ch, radius=12):
+    """Frosted-glass rounded-rect background (blurred + tinted sample of
+    whatever's already behind it, tint chosen from that region's
+    brightness so the card stays legible over either a light or dark
+    part of the poster). Returns the full canvas with just the background
+    card pasted in — callers draw their own content (a logo, a photo +
+    text, ...) on top of it afterward."""
     base = canvas_rgba.convert("RGB")
     region = base.crop((cx, cy, cx + cw, cy + ch))
     frosted = region.filter(ImageFilter.GaussianBlur(16))
@@ -252,6 +345,11 @@ def _frosted_chip(canvas_rgba, logo_thumb, cx, cy, cw, ch, pad=12, radius=12):
     mask = Image.new("L", (cw, ch), 0)
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, cw - 1, ch - 1], radius=radius, fill=255)
     out.paste(fr, (cx, cy), mask)
+    return out
+
+
+def _frosted_chip(canvas_rgba, logo_thumb, cx, cy, cw, ch, pad=12, radius=12):
+    out = _frosted_card_bg(canvas_rgba, cx, cy, cw, ch, radius=radius)
     out.paste(logo_thumb, (cx + pad, cy + pad), logo_thumb)
     return out
 
@@ -276,30 +374,45 @@ def _text_size(draw, text, font):
         return draw.textsize(text, font=font)
 
 
-def _stroke_text(draw, pos, text, font, fill=(255, 255, 255), stroke_color=(0, 0, 0), stroke=2):
-    x, y = pos
-    for ox in range(-stroke, stroke + 1):
-        for oy in range(-stroke, stroke + 1):
-            if ox != 0 or oy != 0:
-                draw.text((x + ox, y + oy), text, font=font, fill=stroke_color)
-    draw.text((x, y), text, font=font, fill=fill)
+def _ceo_card(canvas_rgba, ceo_photo, name, title, cx, cy, photo_size=64, pad=14, radius=16):
+    """A real circular photo of a real person (never AI-generated) plus
+    their name/title, in a frosted card — same fixed spot on every poster
+    so it's reliable, unlike asking an image model to depict a specific
+    person from a text description."""
+    text_w = 190
+    ch = photo_size + pad * 2
+    cw = photo_size + pad * 3 + text_w
+
+    out = _frosted_card_bg(canvas_rgba, cx, cy, cw, ch, radius=radius)
+
+    circle = _circle_crop(ceo_photo, photo_size)
+    out.paste(circle, (cx + pad, cy + pad), circle)
+
+    draw = ImageDraw.Draw(out)
+    font_name = _font("arialbd.ttf", 22)
+    font_title = _font("arial.ttf", 18)
+    text_x = cx + pad * 2 + photo_size
+    name_y = cy + pad
+    draw.text((text_x, name_y), name, font=font_name, fill=(255, 255, 255))
+    if title:
+        draw.text((text_x, name_y + 27), title, font=font_title, fill=(225, 225, 225))
+    return out
 
 
 # ---------------------------------------------------------------------------
-# Display (on-image UI) version
+# Display (Instagram post-UI preview) version — the poster itself already
+# has its own text/CTA drawn by the image model; this just adds a small
+# real-logo stamp and simulates Instagram's own post chrome around it
+# (profile row, Follow button, caption preview, bottom "Learn More" bar).
 # ---------------------------------------------------------------------------
 
-def build_display_image(base_image, company_name, image_headline, instagram_copy, logo=None):
+def build_display_image(base_image, company_name, instagram_copy, logo=None,
+                         ceo_photo=None, ceo_name="", ceo_title=""):
     img = _fill_to_target(base_image)
     W, H = img.size
 
     grad = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     gd = ImageDraw.Draw(grad)
-    fh = int(H * 0.48)
-    fs = H - fh
-    for i in range(fh):
-        a = int((i / fh) ** 1.5 * 175)
-        gd.line([(0, fs + i), (W, fs + i)], fill=(0, 0, 0, a))
     ui_h = 185
     ui_y = H - ui_h
     for i in range(ui_h):
@@ -318,6 +431,9 @@ def build_display_image(base_image, company_name, image_headline, instagram_copy
         cy = 26
         img = _frosted_chip(img, lt, cx, cy, cw, ch, pad=pad)
 
+    if ceo_photo and ceo_name:
+        img = _ceo_card(img, ceo_photo, ceo_name, ceo_title, cx=26, cy=26)
+
     img = img.convert("RGB")
     draw = ImageDraw.Draw(img)
 
@@ -334,17 +450,6 @@ def build_display_image(base_image, company_name, image_headline, instagram_copy
     ax = bx + btw + 18
     ay = btn_y + btn_h // 2
     draw.polygon([(ax, ay - 9), (ax + 14, ay), (ax, ay + 9)], fill=(170, 170, 170))
-
-    tx = 46
-    fn = _font("arialbd.ttf", 36)
-    fb = _font("arial.ttf", 28)
-    ny = btn_y - 130
-    _stroke_text(draw, (tx, ny), company_name.upper(), fn, fill=(255, 255, 255), stroke_color=(0, 0, 0), stroke=2)
-    if image_headline and image_headline.strip():
-        hy = ny + 55
-        for line in textwrap.wrap(image_headline.strip(), width=36)[:2]:
-            _stroke_text(draw, (tx, hy), line, fb, fill=(238, 238, 238), stroke_color=(0, 0, 0), stroke=1)
-            hy += 42
 
     pad_ui = 18
     pic_size = 54
@@ -390,21 +495,19 @@ def build_display_image(base_image, company_name, image_headline, instagram_copy
 
 
 # ---------------------------------------------------------------------------
-# Clean version (no on-image UI chrome)
+# Clean version — the actual ready-to-post image. The poster (headline,
+# CTA, layout) is entirely AI-drawn already; this just crops to the target
+# ad dimensions and stamps the real fetched logo, since the model can't
+# reliably reproduce an exact brand mark.
 # ---------------------------------------------------------------------------
 
-def build_clean_image(base_image, company_name, image_headline, logo=None):
+def build_clean_image(base_image, logo=None, ceo_photo=None, ceo_name="", ceo_title=""):
     img = _fill_to_target(base_image)
     W, H = img.size
-    grad = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(grad)
-    fh = int(H * 0.42)
-    fs = H - fh
-    for i in range(fh):
-        a = int((i / fh) ** 1.5 * 170)
-        gd.line([(0, fs + i), (W, fs + i)], fill=(0, 0, 0, a))
-    img = img.convert("RGBA")
-    img = Image.alpha_composite(img, grad)
+    needs_rgba = logo or (ceo_photo and ceo_name)
+
+    if needs_rgba:
+        img = img.convert("RGBA")
 
     if logo:
         lt = logo.copy()
@@ -416,18 +519,12 @@ def build_clean_image(base_image, company_name, image_headline, logo=None):
         cy = 26
         img = _frosted_chip(img, lt, cx, cy, cw, ch, pad=pad)
 
-    img = img.convert("RGB")
-    draw = ImageDraw.Draw(img)
-    tx = 46
-    fn = _font("arialbd.ttf", 36)
-    fb = _font("arial.ttf", 28)
-    ny = int(H * 0.72)
-    _stroke_text(draw, (tx, ny), company_name.upper(), fn, fill=(255, 255, 255), stroke_color=(0, 0, 0), stroke=2)
-    if image_headline and image_headline.strip():
-        hy = ny + 55
-        for line in textwrap.wrap(image_headline.strip(), width=36)[:2]:
-            _stroke_text(draw, (tx, hy), line, fb, fill=(238, 238, 238), stroke_color=(0, 0, 0), stroke=1)
-            hy += 42
+    if ceo_photo and ceo_name:
+        img = _ceo_card(img, ceo_photo, ceo_name, ceo_title, cx=26, cy=26)
+
+    if needs_rgba:
+        img = img.convert("RGB")
+
     return img
 
 
@@ -435,16 +532,18 @@ def build_clean_image(base_image, company_name, image_headline, logo=None):
 # Entry point
 # ---------------------------------------------------------------------------
 
-def composite_ad_image(base_image, company_name, image_headline, instagram_copy, logo_url=None, static_dir="static"):
-    """Builds both the display (on-image UI) and clean versions, saves them
-    under static_dir, and returns (display_path, clean_path)."""
+def composite_ad_image(base_image, company_name, instagram_copy, logo_url=None,
+                        ceo_photo_url=None, ceo_name="", ceo_title="", static_dir="static"):
+    """Builds both the display (Instagram-preview) and clean versions,
+    saves them under static_dir, and returns (display_path, clean_path)."""
     logo = fetch_logo(logo_url)
+    ceo_photo = fetch_ceo_photo(ceo_photo_url)
 
-    print("[image] building display image (on-image UI)...")
-    display = build_display_image(base_image, company_name, image_headline, instagram_copy, logo)
+    print("[image] building display image (Instagram UI preview)...")
+    display = build_display_image(base_image, company_name, instagram_copy, logo, ceo_photo, ceo_name, ceo_title)
 
     print("[image] building clean version...")
-    clean = build_clean_image(base_image, company_name, image_headline, logo)
+    clean = build_clean_image(base_image, logo, ceo_photo, ceo_name, ceo_title)
 
     os.makedirs(static_dir, exist_ok=True)
     display_path = os.path.join(static_dir, "generated_ad.jpg")

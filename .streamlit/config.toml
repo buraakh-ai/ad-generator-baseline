@@ -1,0 +1,29 @@
+# Native Streamlit theming for the frontend CRM shell (frontend/streamlit_app.py
+# + frontend/app_pages/*.py). Picked up from the working directory Streamlit is
+# run from — that's the repo root both locally (`streamlit run
+# frontend/streamlit_app.py` from repo root, per README) and in
+# Dockerfile.frontend (WORKDIR /app, this file copied to /app/.streamlit/).
+#
+# Brand-accent palette: neutral light content area, indigo primary accent, and
+# a deep indigo sidebar so the module navigation reads as a distinct "app
+# shell" rail, CRM-style — see theming reference for the general approach.
+[theme]
+base = "light"
+primaryColor = "#4f46e5"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f8fafc"
+textColor = "#0f172a"
+borderColor = "#e2e8f0"
+linkColor = "#4f46e5"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=swap"
+baseRadius = "10px"
+showWidgetBorder = true
+showSidebarBorder = true
+
+[theme.sidebar]
+backgroundColor = "#1e1b4b"
+secondaryBackgroundColor = "#312e81"
+textColor = "#e0e7ff"
+primaryColor = "#818cf8"
+borderColor = "#3730a3"

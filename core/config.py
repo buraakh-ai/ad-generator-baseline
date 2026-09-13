@@ -29,12 +29,20 @@ def _bool(name, default=False):
 
 class Settings:
     def __init__(self):
-        # ---- OpenAI (the only LLM/image provider — gpt-4o-mini for all text
-        # generation and tool calling, gpt-image-1 for images) ----
+        # ---- OpenAI (the only LLM/image provider). Text is two-tier again:
+        # "low" (gpt-4o-mini) for short, low-risk generations (the creative-
+        # brief headline, the quality-review score); "high" (a genuinely
+        # stronger model) for brand-sensitive/creative work — ad copy,
+        # company research, event selection, and the image poster-prompt
+        # writer. Images are a 3-tier fallback chain, best quality first:
+        # gpt-image-2.5-sunburst -> gpt-image-1 -> dall-e-3 (see
+        # tools/image_provider_tools.py) ----
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.openai_text_model = os.getenv("OPENAI_TEXT_MODEL", "gpt-4o-mini")
-        self.openai_image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
-        self.openai_fallback_image_model = os.getenv("OPENAI_FALLBACK_IMAGE_MODEL", "dall-e-3")
+        self.openai_high_end_text_model = os.getenv("OPENAI_HIGH_END_TEXT_MODEL", "gpt-5.5")
+        self.openai_image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst")
+        self.openai_fallback_image_model = os.getenv("OPENAI_FALLBACK_IMAGE_MODEL", "gpt-image-1")
+        self.openai_last_resort_image_model = os.getenv("OPENAI_LAST_RESORT_IMAGE_MODEL", "dall-e-3")
 
         # ---- AWS (S3 for generated images + Secrets Manager for social
         # tokens and the app-secrets overlay below) ----
@@ -44,6 +52,25 @@ class Settings:
         self.aws_bucket_name = os.getenv("AWS_BUCKET_NAME", "")
         self.business_id = os.getenv("BUSINESS_ID", "default-business")
         self.app_secrets_name = f"ad-generator/{self.business_id}/app-secrets"
+
+        # ---- Brand assets (this deployment's own real logo/CEO photo —
+        # same single-business scope as the Facebook/Instagram/LinkedIn
+        # credentials above, not per-campaign). When set, these override the
+        # Clearbit-researched logo_url and add a CEO headshot card to every
+        # generated ad image (see skills/image_compositing_skill.py). Public
+        # URLs only — e.g. a public-read S3 object, same convention
+        # tools/s3_tool.py already uses for generated images. Leave blank to
+        # skip (falls back to the researched logo_url, no CEO card). ----
+        self.brand_logo_url = os.getenv("BRAND_LOGO_URL", "")
+        self.brand_ceo_photo_url = os.getenv("BRAND_CEO_PHOTO_URL", "")
+        self.brand_ceo_name = os.getenv("BRAND_CEO_NAME", "")
+        self.brand_ceo_title = os.getenv("BRAND_CEO_TITLE", "")
+        # A generated image can't actually be clickable on social media, so
+        # rather than draw a fake "button" graphic, the poster prints this
+        # URL as plain small text near the bottom when it's set (see
+        # skills/image_compositing_skill.py's cta_note). Leave blank to keep
+        # the old behavior (a drawn CTA button label, no real URL).
+        self.brand_contact_url = os.getenv("BRAND_CONTACT_URL", "")
 
         # ---- Facebook ----
         self.facebook_page_id = os.getenv("FACEBOOK_PAGE_ID", "")

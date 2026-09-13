@@ -27,6 +27,11 @@ class GenerateImageRequest(BaseModel):
     company_details: dict = {}
     logo_url: Optional[str] = None
     custom_prompt: str = ""
+    # Printed as small plain text near the bottom of the poster in place of
+    # a CTA button (an image can't actually be clickable) — per-request,
+    # overriding settings.brand_contact_url if both are set. Falls back to
+    # that deployment-wide setting if left blank here.
+    contact_url: str = ""
 
 
 class SwitchProviderRequest(BaseModel):

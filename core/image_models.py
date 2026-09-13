@@ -10,8 +10,9 @@ _CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 _DEFAULT_CONFIG = {
     "active_provider": "openai_image",
     "providers": [
-        {"name": "openai_image", "label": "OpenAI gpt-image-1 (best quality)", "enabled": True, "api_key": ""},
-        {"name": "openai_dalle3", "label": "OpenAI DALL-E 3 (fallback)", "enabled": True, "api_key": ""},
+        {"name": "openai_image", "label": "OpenAI gpt-image-2.5-sunburst (best quality)", "enabled": True, "api_key": ""},
+        {"name": "openai_image_fallback", "label": "OpenAI gpt-image-1 (fallback)", "enabled": True, "api_key": ""},
+        {"name": "openai_dalle3", "label": "OpenAI DALL-E 3 (last resort)", "enabled": True, "api_key": ""},
     ],
     "prompt_prefix": "", "prompt_suffix": "", "override_prompt": "",
 }

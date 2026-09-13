@@ -106,6 +106,7 @@ def generate(req: GenerateRequest):
             "detected_company_name": result["company_name"],
             "detected_event": result["detected_event"],
             "company_details": result["company_data"],
+            "website_url": result["website_url"],
             "image_headline": ads.get("image_headline", ""),
             "quality_score": ads.get("quality_score", 0),
             "quality_reason": ads.get("quality_reason", ""),
@@ -141,6 +142,7 @@ def retry_event(req: RetryEventRequest):
             "detected_company_name": result["company_name"],
             "detected_event": result["detected_event"],
             "company_details": result["company_data"],
+            "website_url": result["website_url"],
             "image_headline": ads.get("image_headline", ""),
             "quality_score": ads.get("quality_score", 0),
             "quality_reason": ads.get("quality_reason", ""),
@@ -157,6 +159,7 @@ def generate_image(req: GenerateImageRequest):
             req.company_name, req.instagram_copy, req.image_headline,
             req.event_context, req.company_details, req.logo_url,
             custom_prompt=req.custom_prompt.strip() or None,
+            contact_url=req.contact_url.strip() or None,
             static_dir=_STATIC_DIR,
         )
 
