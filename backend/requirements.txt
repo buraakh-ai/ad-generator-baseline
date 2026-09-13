@@ -1,0 +1,19 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+python-dotenv>=1.0
+pyyaml>=6.0
+requests>=2.32
+boto3>=1.35
+beautifulsoup4>=4.12
+feedparser>=6.0
+pillow>=10.4
+holidays>=0.60
+agno>=1.1
+urllib3>=2.2
+
+# OpenAI SDK: used by core/agno_models.py's Agno-Agent path (agno.models.openai
+# imports it internally). core/model_router.py's fallback path talks to the
+# OpenAI REST API directly over plain HTTP and doesn't need the SDK itself,
+# but installing it keeps the primary Agno-Agent path working.
+openai>=1.50

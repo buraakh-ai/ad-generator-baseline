@@ -1,0 +1,17 @@
+# Used by: agents/orchestrator.py, right after event selection — produces
+# the shared image headline every platform-copy agent and the image agent
+# reference. complexity: low (short, low-risk task — good fit for the
+# open-source-first tier).
+system: ""
+user: |
+  Company: {company_name}
+  What they do: {what_they_do}
+  Brand tone: {brand_tone}
+  Trending event to connect to: {event_context}
+  Ad angle: {ad_idea}
+
+  Write a short 5-8 word headline for this company's ad image.
+  Return ONLY a JSON object with no markdown:
+  {{
+    "image_headline": "short 5-8 word headline for the ad image"
+  }}

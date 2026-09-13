@@ -1,0 +1,42 @@
+# Fallback festival/holiday table, only consulted by tools/festival_tool.py
+# when the installed `holidays` package doesn't expose India's categorized
+# Hindu/Islamic festivals. Keyed by ISO date (YYYY-MM-DD).
+#
+# IMPORTANT — keep this updated:
+#   - Diwali, Dussehra/Vijayadashami, Holi, Eid al-Fitr, Eid al-Adha follow
+#     lunar/lunisolar calendars, so their Gregorian dates shift every year
+#     and must be re-verified annually (Eid dates especially can move by a
+#     day depending on moon sighting).
+#   - Republic Day (Jan 26) and Independence Day (Aug 15) for India, and
+#     July 4th / Christmas / New Year's Day for the US, are fixed and don't
+#     need updates.
+#   - US holidays that fall on a fixed weekday (Thanksgiving, Labor Day,
+#     Presidents Day, Memorial Day, MLK Day) are already covered accurately
+#     by the `holidays` package's US calendar and are only duplicated here
+#     as a safety net.
+
+"2026-01-01": [{country: "US", name: "New Year's Day"}]
+"2026-01-19": [{country: "US", name: "Martin Luther King Jr. Day"}]
+"2026-01-26": [{country: "India", name: "Republic Day"}]
+"2026-02-16": [{country: "US", name: "Presidents' Day"}]
+"2026-03-04": [{country: "India", name: "Holi"}]
+"2026-03-20": [{country: "India", name: "Eid al-Fitr (approximate — confirm against moon sighting)"}]
+"2026-05-25": [{country: "US", name: "Memorial Day"}]
+"2026-05-27": [{country: "India", name: "Eid al-Adha (approximate — confirm against moon sighting)"}]
+"2026-07-04": [{country: "US", name: "Independence Day"}]
+"2026-08-15": [{country: "India", name: "Independence Day"}]
+"2026-09-07": [{country: "US", name: "Labor Day"}]
+"2026-10-20": [{country: "India", name: "Dussehra / Vijayadashami"}]
+"2026-11-08": [{country: "India", name: "Diwali"}]
+"2026-11-26": [{country: "US", name: "Thanksgiving"}]
+"2026-12-25": [{country: "US", name: "Christmas"}]
+
+"2027-01-01": [{country: "US", name: "New Year's Day"}]
+"2027-01-18": [{country: "US", name: "Martin Luther King Jr. Day"}]
+"2027-01-26": [{country: "India", name: "Republic Day"}]
+"2027-02-15": [{country: "US", name: "Presidents' Day"}]
+"2027-07-04": [{country: "US", name: "Independence Day"}]
+"2027-08-15": [{country: "India", name: "Independence Day"}]
+"2027-09-06": [{country: "US", name: "Labor Day"}]
+"2027-11-25": [{country: "US", name: "Thanksgiving"}]
+"2027-12-25": [{country: "US", name: "Christmas"}]

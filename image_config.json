@@ -1,0 +1,31 @@
+{
+  "_instructions": {
+    "providers": "List of image providers in fallback order. First one is used by default.",
+    "active_provider": "Set to the provider you want to use.",
+    "provider_options": ["openai_image", "openai_dalle3"],
+    "openai_image_note": "openai_image = gpt-image-1 (OpenAI's current best-quality API image model). openai_dalle3 = the older DALL-E 3 model, kept as a cheaper paid fallback. Both read OPENAI_API_KEY from .env - the api_key field below is only used as an override.",
+    "prompt_prefix": "Text prepended to every generated prompt.",
+    "prompt_suffix": "Text appended to every generated prompt.",
+    "override_prompt": "If not blank this EXACT text is used as the full prompt. Leave blank for normal operation."
+  },
+
+  "active_provider": "openai_image",
+  "providers": [
+    {
+      "name": "openai_image",
+      "label": "OpenAI gpt-image-1 (best quality)",
+      "enabled": true,
+      "api_key": ""
+    },
+    {
+      "name": "openai_dalle3",
+      "label": "OpenAI DALL-E 3 (fallback)",
+      "enabled": true,
+      "api_key": ""
+    }
+  ],
+
+  "prompt_prefix": "",
+  "prompt_suffix": "",
+  "override_prompt": ""
+}

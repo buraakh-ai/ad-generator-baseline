@@ -1,0 +1,20 @@
+# Used by: skills/company_research_skill.py (research_agent)
+# complexity: high — brand-sensitive, feeds every downstream prompt.
+system: ""
+user: |
+  Analyze this company and return ONLY a JSON object with no markdown:
+
+  Company: {company_name}
+  Website URL: {website_url}
+  Website Content: {website_content}
+
+  Return this exact JSON structure:
+  {{
+    "what_they_do": "one sentence description",
+    "services": "comma separated list of main services",
+    "target_audience": "who they serve",
+    "brand_tone": "professional/friendly/bold/luxury/etc",
+    "key_values": "comma separated values",
+    "tagline": "their tagline or a suggested one",
+    "logo_url": "{logo_url}"
+  }}

@@ -1,0 +1,11 @@
+[
+  {
+    "company_name": "Nike",
+    "company_url": "https://www.nike.com"
+  },
+  {
+    "company_name": "Acme Co",
+    "ad_idea": "back to school sale",
+    "event_context": "Diwali"
+  }
+]

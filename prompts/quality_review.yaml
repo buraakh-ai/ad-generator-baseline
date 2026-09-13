@@ -1,0 +1,21 @@
+# Used by: agents/orchestrator.py, after all per-platform copy is
+# generated — scores the overall campaign. complexity: low (simple
+# scoring/critique task).
+system: ""
+user: |
+  Rate the quality of this ad campaign for {company_name} on a scale of 1-10.
+
+  TikTok: {tiktok}
+  Instagram: {instagram}
+  Twitter/X: {twitter}
+  Facebook: {facebook}
+  LinkedIn: {linkedin}
+
+  Consider: does the copy connect naturally to the event, match the brand tone
+  ({brand_tone}), and have a clear hook/CTA per platform?
+
+  Return ONLY a JSON object with no markdown:
+  {{
+    "quality_score": 8,
+    "quality_reason": "one sentence explaining the score"
+  }}

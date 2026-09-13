@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(python get_linkedin_token.py)",
+      "Bash(pip --version)",
+      "Bash(pip show *)",
+      "PowerShell(py --version)",
+      "PowerShell(python --version)",
+      "PowerShell(uv python install 3.12)",
+      "Bash(.venv/Scripts/python.exe -c \"import mcp_server.server\")",
+      "Bash(.venv/Scripts/python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(curl -s -o /dev/null -w \"root: %{http_code}\\\\n\" http://127.0.0.1:8000/)",
+      "Bash(curl -s http://127.0.0.1:8000/get-image-providers)",
+      "Bash(curl -s http://127.0.0.1:8000/call-count)",
+      "Bash(curl -s -o /dev/null -w \"root: %{http_code}\\\\n\" http://127.0.0.1:8000/ 2>&1; echo \"---log---\"; tail -30 /tmp/uvicorn.log 2>&1)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -o /dev/null -w \"streamlit: %{http_code}\\\\n\" http://127.0.0.1:8501/)",
+      "PowerShell(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'uvicorn backend.main|streamlit run frontend' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; \"killed $\\($_.ProcessId\\)\" })",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8000,8501 -State Listen -ErrorAction SilentlyContinue)",
+      "Bash(powershell.exe -NoProfile -Command \"netstat -ano | Select-String ':8000|:8501'\")"
+    ]
+  }
+}

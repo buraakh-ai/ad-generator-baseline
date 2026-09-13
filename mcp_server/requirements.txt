@@ -1,0 +1,6 @@
+# Not installed by backend/requirements.txt or frontend/requirements.txt —
+# the MCP server is scaffolding for a future release, not part of the
+# currently deployed solution (see mcp_server/server.py's module docstring).
+# Install this separately only when you're actually running the MCP server:
+#   pip install -r backend/requirements.txt -r mcp_server/requirements.txt
+mcp>=1.2

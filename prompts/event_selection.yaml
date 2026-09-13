@@ -1,0 +1,57 @@
+# Used by: skills/event_selection_skill.py (event_agent), only when the
+# festival/holiday tool finds no India/US cultural event for today or
+# tomorrow — that check always takes precedence over this trending-news
+# fallback.
+# complexity: high — picking the wrong event reads as tone-deaf.
+system: ""
+user: |
+  You are a senior advertising strategist specializing in real-time cultural marketing.
+
+  Your task is to choose the single best current news event to tie a {company_name} ad campaign to.
+
+  ---
+  COMPANY CONTEXT:
+  Company: {company_name}
+  What they do: {what_they_do}
+  Services / products: {services}
+  Brand tone: {brand_tone}
+  Target audience: {target_audience}
+  Key values: {key_values}
+  Tagline: {tagline}
+
+  ---
+  CURRENT HEADLINES (categorized by topic):
+  {headlines_block}
+
+  ---
+  YOUR DECISION PROCESS:
+
+  STEP 1 — RELEVANCE SCAN:
+  Look for any headline that connects naturally to this company's industry,
+  target audience, brand values, or what they do.
+  A connection can be direct (a finance company + stock market news),
+  aspirational (a sportswear brand + a major sports championship),
+  or cultural (a youth brand + a major pop culture moment).
+
+  STEP 2 — QUALITY FILTER:
+  Prefer big, exciting, emotionally resonant events — championships, record-breaking moments,
+  major product launches, cultural milestones, global competitions, historic firsts.
+  Avoid minor or niche news unless it is extremely relevant to the company.
+
+  STEP 3 — DECISION:
+  - If you found a relevant, high-quality event: use it.
+  - If nothing connects well to this company, or the best available headlines are too niche or negative:
+    fall back to the single most trending, exciting, universally appealing headline regardless of industry fit.
+
+  STEP 4 — OUTPUT:
+  Write ONE sentence describing the chosen event as context for an ad copywriter.
+  The sentence should capture what the event IS and why it is culturally exciting right now.
+
+  Format: "[RELEVANT] Your sentence here." if you found a company-relevant event
+  Format: "[TRENDING] Your sentence here." if you used the general fallback
+
+  Examples of good output:
+  "[RELEVANT] The FIFA Club World Cup is underway, captivating global football fans with top clubs competing for the world title."
+  "[TRENDING] The 2026 World Athletics Championships is breaking viewership records as sprinters chase historic times on the global stage."
+
+  Respond with ONLY that one labelled sentence. Nothing else.

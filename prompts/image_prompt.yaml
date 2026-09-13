@@ -1,0 +1,11 @@
+# Used by: skills/image_compositing_skill.py build_image_prompt(). The
+# {scene} and {style} slots are filled from the industry/tone lookup tables
+# in that module; prefix/suffix around this core template still come from
+# image_config.json (prompt_prefix / prompt_suffix / override_prompt).
+# (There used to be a "negative" key here too, for the old
+# Pollinations/HuggingFace providers' negative-prompt parameter — OpenAI's
+# image API has no such parameter, and now that OpenAI is the only image
+# provider that key is dropped; the "no people/text/etc." constraints below
+# are baked into the positive prompt instead.)
+core: |
+  {scene}. {style}. Photorealistic professional advertising photography, shot on Sony A7R IV, 8K ultra-detailed, tack sharp focus throughout. Empty scene with no people, no humans, no faces, no silhouettes, no crowds. No text, no words, no letters, no numbers, no signs, no logos, no watermarks, no graphics, no UI elements. Interesting but controlled composition — dynamic angles welcome but no extreme fisheye or distortion. The kind of composition a professional photographer would choose for a premium brand campaign. Lower portion of image naturally darker for text overlay. Full bleed, edge to edge.

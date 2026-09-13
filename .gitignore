@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.vs/
+static/
+.venv/
+
+# secrets — never commit
+.env
+.env.*
+!.env.example

@@ -1,0 +1,25 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY backend/requirements.txt backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
+
+COPY core/ core/
+COPY tools/ tools/
+COPY skills/ skills/
+COPY agents/ agents/
+COPY prompts/ prompts/
+COPY backend/ backend/
+COPY scripts/ scripts/
+COPY image_config.json privacy_policy.html ./
+
+# mcp_server/ is intentionally NOT copied into this image — it's scaffolding
+# for a future release, not part of the currently deployed solution. See
+# mcp_server/server.py's module docstring.
+
+RUN mkdir -p static
+
+EXPOSE 8000
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

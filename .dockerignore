@@ -1,0 +1,17 @@
+.venv/
+.git/
+.vs/
+__pycache__/
+**/__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+static/*.jpg
+static/*.jpeg
+static/*.png
+!static/instagram_chrome.png
+mcp_server/
+scripts/__pycache__/
+*.md
+.claude/
