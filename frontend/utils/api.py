@@ -11,11 +11,22 @@ unchanged), then a localhost default."""
 import os
 
 import requests
-import streamlit as st
 
 
 def resolve_backend_url(module_env_var: str, default: str = "http://localhost:8000") -> str:
     return os.getenv(module_env_var) or os.getenv("BACKEND_BASE_URL") or default
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    """Reads a boolean feature flag straight from the frontend's own env —
+    for UI-visibility toggles a module wants to gate without a backend
+    round-trip. Not the same env-var namespace as the backend's own
+    core.config.Settings (they're separate deployables); set the flag in
+    whichever .env this frontend process actually reads."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
 def make_api(base_url: str):
@@ -28,11 +39,3 @@ def make_api(base_url: str):
         return r.json()
 
     return _api
-
-
-@st.cache_data(ttl=30, show_spinner=False)
-def backend_online(base_url: str) -> bool:
-    try:
-        return requests.get(f"{base_url}/", timeout=2).status_code == 200
-    except Exception:
-        return False

@@ -4,17 +4,24 @@
 # frontend/streamlit_app.py` from repo root, per README) and in
 # Dockerfile.frontend (WORKDIR /app, this file copied to /app/.streamlit/).
 #
-# Brand-accent palette: neutral light content area, indigo primary accent, and
-# a deep indigo sidebar so the module navigation reads as a distinct "app
-# shell" rail, CRM-style — see theming reference for the general approach.
+# Brand-accent palette: the conventional enterprise CRM/marketing-platform
+# look (Salesforce/HubSpot-style) — a neutral light content area, a trust-
+# signaling blue primary accent, and a dark slate sidebar (not a tinted
+# brand color) so the module navigation reads as a distinct "app shell"
+# rail. Keep this in sync with frontend/utils/theme.py's PALETTE, which
+# carries the same tokens into custom CSS Streamlit's theme system can't
+# reach (success/warning/danger, card/metric/tab styling).
 [theme]
 base = "light"
-primaryColor = "#4f46e5"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f8fafc"
+primaryColor = "#2563eb"
+# Tinted slate canvas with white cards/widgets on top (the standard CRM
+# dashboard treatment) rather than a flat white page — theme.py's CSS gives
+# bordered containers the white surface that makes them read as elevated.
+backgroundColor = "#f1f5f9"
+secondaryBackgroundColor = "#ffffff"
 textColor = "#0f172a"
 borderColor = "#e2e8f0"
-linkColor = "#4f46e5"
+linkColor = "#2563eb"
 font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
 headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=swap"
 baseRadius = "10px"
@@ -22,8 +29,8 @@ showWidgetBorder = true
 showSidebarBorder = true
 
 [theme.sidebar]
-backgroundColor = "#1e1b4b"
-secondaryBackgroundColor = "#312e81"
-textColor = "#e0e7ff"
-primaryColor = "#818cf8"
-borderColor = "#3730a3"
+backgroundColor = "#0f172a"
+secondaryBackgroundColor = "#1e293b"
+textColor = "#e2e8f0"
+primaryColor = "#3b82f6"
+borderColor = "#1e293b"

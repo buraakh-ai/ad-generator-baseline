@@ -7,15 +7,27 @@ Colors/fonts/radii come from the shared theme (.streamlit/config.toml, see
 frontend/streamlit_app.py) — the CSS below only covers structural layout
 config.toml can't express (platform-row layout, section headings)."""
 import os
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import requests
 import streamlit as st
 
-from utils.api import backend_online, make_api, resolve_backend_url
+from utils.api import env_flag, make_api, resolve_backend_url
+from utils.theme import PALETTE, score_color
 
 BACKEND_BASE_URL = resolve_backend_url("AD_GENERATOR_BACKEND_URL")
 _api = make_api(BACKEND_BASE_URL)
+# Prefilled values for the Generate form — this deployment's own business, so
+# the common case is "just hit Generate". Kept in .env rather than hardcoded
+# here so the module stays reusable for another business; blank = empty field.
+DEFAULT_COMPANY_URL = os.getenv("DEFAULT_COMPANY_URL", "")
+DEFAULT_COMPANY_NAME = os.getenv("DEFAULT_COMPANY_NAME", "")
+DEFAULT_CONTACT_URL = os.getenv("DEFAULT_CONTACT_URL", "")
+# Off by default — this creates real ad campaigns (drafts only, but still
+# talks to live Marketing APIs). Set ENABLE_PAID_PROMOTION=true in .env to
+# show the panel.
+SHOW_PAID_PROMOTION = env_flag("ENABLE_PAID_PROMOTION", False)
 
 PLATFORMS = [
     {"key": "tiktok", "label": "TikTok / Reels", "color": "#FE2C55"},
@@ -25,26 +37,33 @@ PLATFORMS = [
     {"key": "linkedin", "label": "LinkedIn", "color": "#0a66c2"},
 ]
 
+# Matches tools/linkedin_ads_tool.py's COUNTRY_GEO_URNS — the frontend
+# can't import a backend-side tool module directly (they're deployed
+# separately), so this small list is kept in sync manually.
+AD_COUNTRIES = [("US", "United States"), ("GB", "United Kingdom"), ("CA", "Canada"),
+                ("IN", "India"), ("AU", "Australia")]
+
 DETAIL_FIELDS = [
     ("What they do", "what_they_do"), ("Services", "services"),
     ("Target audience", "target_audience"), ("Brand tone", "brand_tone"),
     ("Key values", "key_values"), ("Tagline", "tagline"),
 ]
 
-st.html("""
+st.html(f"""
 <style>
-.platform-name { display: flex; align-items: center; font-weight: 600; font-size: .9rem; padding-top: .5rem; }
-.platform-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
-.table-header {
-    display: flex; gap: 1rem; padding: 0 0 .6rem; border-bottom: 2px solid var(--st-border-color, #e2e8f0);
-    font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .55;
-}
-.table-row {
+.platform-name {{ display: flex; align-items: center; font-weight: 600; font-size: .9rem; padding-top: .5rem; }}
+.platform-dot {{ display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }}
+.table-header {{
+    display: flex; gap: 1rem; padding: 0 0 .6rem; border-bottom: 2px solid var(--pal-border, #e2e8f0);
+    font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: {PALETTE["text_muted"]};
+}}
+.table-row {{
     display: flex; align-items: flex-start; gap: 1rem; padding: 1rem 0;
-    border-bottom: 1px solid var(--st-border-color, #e2e8f0);
-}
-.section-title { font-size: 1.15rem; font-weight: 700; margin: 0 0 1rem; }
-.section-subtitle { opacity: .65; font-size: .92rem; margin: -.5rem 0 1.25rem; }
+    border-bottom: 1px solid var(--pal-border, #e2e8f0);
+}}
+.section-title {{ font-size: 1.15rem; font-weight: 700; margin: 0 0 1rem; color: {PALETTE["text"]}; }}
+.section-subtitle {{ color: {PALETTE["text_muted"]}; font-size: .92rem; margin: -.5rem 0 1.25rem; }}
 </style>
 """)
 
@@ -54,14 +73,12 @@ if "image" not in st.session_state:
     st.session_state.image = None
 if "provider_failed" not in st.session_state:
     st.session_state.provider_failed = None
-
-
-def _score_color(score):
-    if score >= 8:
-        return "#16a34a"
-    if score >= 5:
-        return "#d97706"
-    return "#dc2626"
+if "linkedin_post_urn" not in st.session_state:
+    st.session_state.linkedin_post_urn = None
+if "facebook_ad_draft" not in st.session_state:
+    st.session_state.facebook_ad_draft = None
+if "linkedin_ad_draft" not in st.session_state:
+    st.session_state.linkedin_ad_draft = None
 
 
 def _generate_image(campaign, ads, details, fallback_company_name, custom_prompt="", contact_url=""):
@@ -91,16 +108,8 @@ def _generate_image(campaign, ads, details, fallback_company_name, custom_prompt
         st.error(f"Something went wrong generating the image: {e}")
 
 
-title_col, status_col = st.columns([5, 2])
-with title_col:
-    st.title("Ad generator", anchor=False)
-    st.caption("Research a company, tie the campaign to a real event, and generate ad copy + images.")
-with status_col:
-    st.write("")
-    if backend_online(BACKEND_BASE_URL):
-        st.badge("Backend online", icon=":material/check_circle:", color="green")
-    else:
-        st.badge("Backend offline", icon=":material/error:", color="red")
+st.title("Ad generator", anchor=False)
+st.caption("Research a company, tie the campaign to a real event, and generate ad copy + images.")
 
 gen_tab, review_tab, publish_tab = st.tabs([
     "1. Generate", "2. Review copy", "3. Image & publish",
@@ -116,9 +125,10 @@ with gen_tab:
         with st.form("generate_form"):
             col1, col2 = st.columns(2)
             with col1:
-                company_url = st.text_input("Company website URL (optional)", placeholder="https://www.nike.com")
+                company_url = st.text_input("Company website URL (optional)", value=DEFAULT_COMPANY_URL,
+                                             placeholder="https://www.nike.com")
             with col2:
-                company_name = st.text_input("Company name", placeholder="Nike")
+                company_name = st.text_input("Company name", value=DEFAULT_COMPANY_NAME, placeholder="Nike")
 
             product_description = st.text_area("What does your product do? (optional — auto-filled from URL)")
             col3, col4 = st.columns(2)
@@ -130,6 +140,7 @@ with gen_tab:
 
             contact_url = st.text_input(
                 "Contact URL for the ad's call-to-action (optional)",
+                value=DEFAULT_CONTACT_URL,
                 placeholder="https://yoursite.com/contact",
                 help="Printed as small plain text on the image in place of a CTA button — a generated "
                      "image can't actually be clickable. Leave blank to use the company website URL above.",
@@ -213,8 +224,8 @@ with review_tab:
                 with sc1:
                     st.markdown(f"""
                     <div style="text-align:center;">
-                        <div style="font-size:1.8rem;font-weight:800;color:{_score_color(score)};">{score}/10</div>
-                        <div style="font-size:.75rem;opacity:.55;font-weight:600;text-transform:uppercase;">quality</div>
+                        <div style="font-size:1.8rem;font-weight:800;color:{score_color(score)};">{score}/10</div>
+                        <div style="font-size:.75rem;color:{PALETTE["text_muted"]};font-weight:600;text-transform:uppercase;">quality</div>
                     </div>
                     """, unsafe_allow_html=True)
                 with sc2:
@@ -376,6 +387,156 @@ with publish_tab:
                         with st.spinner("Posting to LinkedIn..."):
                             try:
                                 r = _api("POST", "/post-to-linkedin", json={"caption": ads.get("linkedin", ""), "image_url": image_url})
-                                st.success("Posted!") if r.get("success") else st.error(r.get("error"))
+                                if r.get("success"):
+                                    st.session_state.linkedin_post_urn = r.get("post_id")
+                                    st.success("Posted!")
+                                else:
+                                    st.error(r.get("error"))
                             except Exception as e:
                                 st.error(str(e))
+
+        if image and SHOW_PAID_PROMOTION:
+            with st.container(border=True):
+                st.markdown('<p class="section-title">Paid promotion (Meta &amp; LinkedIn)</p>', unsafe_allow_html=True)
+                st.caption(
+                    "Creates a draft campaign only — nothing is ever activated automatically. "
+                    "Review the numbers below, then explicitly activate when you're ready to spend."
+                )
+
+                fb_tab, li_tab = st.tabs(["Meta (Facebook/Instagram)", "LinkedIn"])
+
+                with fb_tab:
+                    draft = st.session_state.facebook_ad_draft
+                    if not draft:
+                        fb_budget = st.number_input("Daily budget (USD)", min_value=1.0, value=10.0, step=1.0, key="fb_budget")
+                        fb_days = st.number_input("Run for how many days", min_value=1, value=7, step=1, key="fb_days")
+                        fb_countries = st.multiselect(
+                            "Countries to target", options=[c for c, _ in AD_COUNTRIES],
+                            format_func=lambda c: dict(AD_COUNTRIES)[c], default=["US"], key="fb_countries",
+                        )
+                        if st.button("Create draft campaign", icon=":material/drafts:", key="create_fb_ad",
+                                     disabled=not fb_countries):
+                            start_dt = datetime.now(timezone.utc)
+                            end_dt = start_dt + timedelta(days=fb_days)
+                            with st.spinner("Creating draft campaign on Meta..."):
+                                try:
+                                    r = _api("POST", "/create-facebook-ad-campaign", json={
+                                        "name": f"{campaign.get('detected_company_name', company_name)} - "
+                                                f"{campaign.get('detected_event') or 'campaign'}",
+                                        "image_url": image_url,
+                                        "message": ads.get("facebook", ""),
+                                        "link": (contact_url.strip() or company_url.strip()
+                                                 or (campaign.get("website_url") or "").strip()),
+                                        "daily_budget_usd": fb_budget,
+                                        "countries": fb_countries,
+                                        "start_time": start_dt.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                                        "end_time": end_dt.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                                    })
+                                    if r.get("success"):
+                                        r["_daily_budget"] = fb_budget
+                                        r["_days"] = fb_days
+                                        st.session_state.facebook_ad_draft = r
+                                        st.rerun()
+                                    else:
+                                        st.error(r.get("error"))
+                                except Exception as e:
+                                    st.error(f"Something went wrong creating the campaign: {e}")
+                    else:
+                        est_spend = draft["_daily_budget"] * draft["_days"]
+                        st.success("Draft campaign created — status: PAUSED (not spending).")
+                        st.write(f"Campaign `{draft['campaign_id']}` / ad set `{draft['adset_id']}` / ad `{draft['ad_id']}`")
+                        st.metric("Estimated total spend", f"${est_spend:,.2f}",
+                                  help=f"${draft['_daily_budget']:,.2f}/day x {draft['_days']} days")
+                        fb_password = st.text_input(
+                            "Execution password (required to activate — this will start spending real budget)",
+                            type="password", key="fb_execution_password",
+                        )
+                        col_a, col_b = st.columns(2)
+                        if col_a.button("Activate campaign", icon=":material/rocket_launch:", type="primary",
+                                         width="stretch", disabled=not fb_password, key="activate_fb_ad"):
+                            with st.spinner("Activating campaign..."):
+                                try:
+                                    r = _api("POST", "/activate-facebook-ad-campaign", json={
+                                        "campaign_id": draft["campaign_id"],
+                                        "adset_id": draft["adset_id"],
+                                        "ad_id": draft["ad_id"],
+                                        "password": fb_password,
+                                    })
+                                    if r.get("success"):
+                                        st.success("Campaign activated — it's now live and spending.")
+                                    else:
+                                        st.error(r.get("error"))
+                                except Exception as e:
+                                    st.error(str(e))
+                        if col_b.button("Discard draft", width="stretch", key="discard_fb_ad"):
+                            st.session_state.facebook_ad_draft = None
+                            st.rerun()
+
+                with li_tab:
+                    li_post_urn = st.session_state.linkedin_post_urn
+                    draft = st.session_state.linkedin_ad_draft
+                    if not li_post_urn:
+                        st.info("Post to LinkedIn organically first (above) so there's content to promote — "
+                                "this reuses that post rather than creating new sponsored content from scratch.")
+                    elif not draft:
+                        st.caption(f"Will promote the post you just published: `{li_post_urn}`")
+                        li_budget = st.number_input("Daily budget (USD)", min_value=1.0, value=10.0, step=1.0, key="li_budget")
+                        li_days = st.number_input("Run for how many days", min_value=1, value=7, step=1, key="li_days")
+                        li_country = st.selectbox(
+                            "Country to target", options=[c for c, _ in AD_COUNTRIES],
+                            format_func=lambda c: dict(AD_COUNTRIES)[c], key="li_country",
+                        )
+                        if st.button("Create draft campaign", icon=":material/drafts:", key="create_li_ad"):
+                            start_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+                            end_ms = start_ms + li_days * 86400000
+                            with st.spinner("Creating draft campaign on LinkedIn..."):
+                                try:
+                                    r = _api("POST", "/create-linkedin-ad-campaign", json={
+                                        "name": f"{campaign.get('detected_company_name', company_name)} - "
+                                                f"{campaign.get('detected_event') or 'campaign'}",
+                                        "share_urn": li_post_urn,
+                                        "daily_budget_usd": li_budget,
+                                        "country_code": li_country,
+                                        "start_time_ms": start_ms,
+                                        "end_time_ms": end_ms,
+                                    })
+                                    if r.get("success"):
+                                        r["_daily_budget"] = li_budget
+                                        r["_days"] = li_days
+                                        st.session_state.linkedin_ad_draft = r
+                                        st.rerun()
+                                    else:
+                                        st.error(r.get("error"))
+                                except Exception as e:
+                                    st.error(f"Something went wrong creating the campaign: {e}")
+                    else:
+                        est_spend = draft["_daily_budget"] * draft["_days"]
+                        st.success("Draft campaign created — status: DRAFT (not spending).")
+                        st.write(f"Campaign group `{draft['campaign_group_urn']}` / campaign `{draft['campaign_urn']}` "
+                                 f"/ creative `{draft['creative_urn']}`")
+                        st.metric("Estimated total spend", f"${est_spend:,.2f}",
+                                  help=f"${draft['_daily_budget']:,.2f}/day x {draft['_days']} days")
+                        li_password = st.text_input(
+                            "Execution password (required to activate — this will start spending real budget)",
+                            type="password", key="li_execution_password",
+                        )
+                        col_a, col_b = st.columns(2)
+                        if col_a.button("Activate campaign", icon=":material/rocket_launch:", type="primary",
+                                         width="stretch", disabled=not li_password, key="activate_li_ad"):
+                            with st.spinner("Activating campaign..."):
+                                try:
+                                    r = _api("POST", "/activate-linkedin-ad-campaign", json={
+                                        "campaign_group_urn": draft["campaign_group_urn"],
+                                        "campaign_urn": draft["campaign_urn"],
+                                        "creative_urn": draft["creative_urn"],
+                                        "password": li_password,
+                                    })
+                                    if r.get("success"):
+                                        st.success("Campaign activated — it's now live and spending.")
+                                    else:
+                                        st.error(r.get("error"))
+                                except Exception as e:
+                                    st.error(str(e))
+                        if col_b.button("Discard draft", width="stretch", key="discard_li_ad"):
+                            st.session_state.linkedin_ad_draft = None
+                            st.rerun()

@@ -96,6 +96,29 @@ class Settings:
         self.linkedin_api_version = os.getenv("LINKEDIN_API_VERSION", "202601")
         self.linkedin_secret_name = f"ad-generator/{self.business_id}/linkedin-token"
 
+        # ---- Paid ad management (Meta Marketing API + LinkedIn Marketing
+        # API — distinct from the organic-posting credentials above; both
+        # need a separate, more selective API product/app-review approval
+        # from their platform than plain posting does). Every campaign this
+        # app creates is forced to PAUSED (Meta) / DRAFT (LinkedIn) — never
+        # ACTIVE — regardless of any other input; activating one (spending
+        # real budget) is a separate, explicit action. See
+        # tools/facebook_ads_tool.py / tools/linkedin_ads_tool.py. ----
+        self.facebook_ad_account_id = os.getenv("FACEBOOK_AD_ACCOUNT_ID", "")
+        self.facebook_marketing_access_token = os.getenv("FACEBOOK_MARKETING_ACCESS_TOKEN", "") or self.facebook_page_token
+        self.facebook_ad_currency = os.getenv("FACEBOOK_AD_CURRENCY", "USD")
+
+        self.linkedin_ad_account_id = os.getenv("LINKEDIN_AD_ACCOUNT_ID", "")
+        self.linkedin_marketing_access_token = os.getenv("LINKEDIN_MARKETING_ACCESS_TOKEN", "") or self.linkedin_access_token
+        self.linkedin_ad_currency = os.getenv("LINKEDIN_AD_CURRENCY", "USD")
+
+        # Shared secret required to actually activate a draft campaign (the
+        # one call that spends real money) — checked server-side in
+        # backend/main.py's /activate-*-ad-campaign endpoints, so it can't
+        # be bypassed by calling the API directly. Left blank, activation
+        # is blocked entirely (fail-closed) rather than silently allowed.
+        self.campaign_execution_password = os.getenv("CAMPAIGN_EXECUTION_PASSWORD", "")
+
         # ---- Loop-safety: every retry/fallback loop in the project reads
         # its bound from here instead of hardcoding a number. ----
         self.max_llm_attempts = _int("MAX_LLM_ATTEMPTS", 3)

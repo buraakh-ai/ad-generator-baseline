@@ -9,13 +9,17 @@ file's header comment for why it lives at the repo root."""
 from dotenv import load_dotenv
 import streamlit as st
 
+from utils.theme import inject_global_css
+
 load_dotenv()
 
 st.set_page_config(page_title="Buraq Growth Suite", page_icon=":material/rocket_launch:", layout="wide")
+inject_global_css()
 
 with st.sidebar:
     st.markdown("### :material/hub: Buraq Growth Suite")
     st.caption("AI marketing & growth modules")
+    st.divider()
 
 page = st.navigation({
     "Modules": [

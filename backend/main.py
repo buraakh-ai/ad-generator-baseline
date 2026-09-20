@@ -11,6 +11,7 @@ client re-submit /generate after one provider's keys were exhausted and it
 switched to another mid-request. Text generation is OpenAI-only now
 (core.model_router, gpt-4o-mini by default) — /generate either succeeds or
 returns `exhausted: true` if OpenAI fails after all configured retries."""
+import hmac
 import os
 
 from fastapi import FastAPI
@@ -19,13 +20,16 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from agents import facebook_agent, image_agent, instagram_agent, linkedin_agent, orchestrator
-from backend.schemas import (GenerateImageRequest, GenerateRequest, PostRequest,
+from backend.schemas import (ActivateFacebookAdRequest, ActivateLinkedInAdRequest, CreateFacebookAdRequest,
+                              CreateLinkedInAdRequest, GenerateImageRequest, GenerateRequest, PostRequest,
                               RetryEventRequest, SwitchProviderRequest)
 from core.config import settings
 from core.image_models import get_providers, load_config
 from core.model_router import AllProvidersExhaustedError, call_counter
+from tools.facebook_ads_tool import FacebookAdsError
 from tools.facebook_tool import refresh_facebook_token
 from tools.image_provider_tools import ProviderFailedError
+from tools.linkedin_ads_tool import LinkedInAdsError
 from tools.linkedin_tool import check_linkedin_token_expiry
 
 _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -80,6 +84,18 @@ def _resolve_local_image_path(image_url: str) -> str:
     if "static/" in image_url:
         return "static/" + image_url.split("static/")[-1].split("?")[0]
     return image_url.lstrip("/").split("?")[0]
+
+
+def _check_execution_password(password: str) -> str:
+    """Gate for the two endpoints that actually spend money. Returns an
+    error string if the check fails, or "" if it passes. Fails closed: an
+    unconfigured CAMPAIGN_EXECUTION_PASSWORD blocks activation entirely
+    rather than allowing it through on an empty/missing password."""
+    if not settings.campaign_execution_password:
+        return "Campaign execution is locked: CAMPAIGN_EXECUTION_PASSWORD is not configured."
+    if not password or not hmac.compare_digest(password, settings.campaign_execution_password):
+        return "Incorrect execution password."
+    return ""
 
 
 @app.post("/generate")
@@ -243,6 +259,71 @@ def post_linkedin(req: PostRequest):
             return JSONResponse({"success": False, "error": f"Image file not found: {local_path}"}, status_code=400)
         post_id = linkedin_agent.post(local_path, req.caption)
         return {"success": True, "post_id": post_id}
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# Paid ad management (Meta + LinkedIn Marketing APIs). Every campaign these
+# create is forced to PAUSED (Meta) / DRAFT (LinkedIn) — activation is a
+# separate endpoint the frontend only calls after explicit human
+# confirmation. See tools/facebook_ads_tool.py / tools/linkedin_ads_tool.py.
+# ---------------------------------------------------------------------------
+
+@app.post("/create-facebook-ad-campaign")
+def create_facebook_ad_campaign(req: CreateFacebookAdRequest):
+    try:
+        local_path = _resolve_local_image_path(req.image_url)
+        if not os.path.exists(local_path):
+            return JSONResponse({"success": False, "error": f"Image file not found: {local_path}"}, status_code=400)
+        result = facebook_agent.create_ad_campaign(
+            req.name, local_path, req.message, req.link, req.daily_budget_usd, req.countries,
+            req.start_time, req.end_time,
+        )
+        return {"success": True, **result}
+    except FacebookAdsError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@app.post("/activate-facebook-ad-campaign")
+def activate_facebook_ad_campaign(req: ActivateFacebookAdRequest):
+    password_error = _check_execution_password(req.password)
+    if password_error:
+        return JSONResponse({"success": False, "error": password_error}, status_code=403)
+    try:
+        facebook_agent.activate_ad_campaign(req.campaign_id, req.adset_id, req.ad_id)
+        return {"success": True}
+    except FacebookAdsError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@app.post("/create-linkedin-ad-campaign")
+def create_linkedin_ad_campaign(req: CreateLinkedInAdRequest):
+    try:
+        result = linkedin_agent.create_ad_campaign(
+            req.name, req.share_urn, req.daily_budget_usd, req.country_code, req.start_time_ms, req.end_time_ms,
+        )
+        return {"success": True, **result}
+    except LinkedInAdsError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@app.post("/activate-linkedin-ad-campaign")
+def activate_linkedin_ad_campaign(req: ActivateLinkedInAdRequest):
+    password_error = _check_execution_password(req.password)
+    if password_error:
+        return JSONResponse({"success": False, "error": password_error}, status_code=403)
+    try:
+        linkedin_agent.activate_ad_campaign(req.campaign_group_urn, req.campaign_urn, req.creative_urn)
+        return {"success": True}
+    except LinkedInAdsError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 

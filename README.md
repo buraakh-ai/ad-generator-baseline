@@ -149,6 +149,28 @@ Each module resolves its **own** backend URL via `frontend/utils/api.py`'s `reso
 
 It calls the agents directly (no running backend required), logs a per-company/per-platform summary to stdout, and exits non-zero if any company's copy/image generation failed (a single dead social token doesn't fail the whole run — posting failures are logged per-platform instead). Only Instagram, Facebook, and LinkedIn have posting APIs wired up; TikTok/X copy is generated but not auto-posted.
 
+## Paid ad management (Meta + LinkedIn)
+
+Beyond organic posting, the Ad generator module (Image & publish tab, "Paid promotion") can create and run actual paid campaigns via the **Meta Marketing API** and **LinkedIn Marketing API** — `tools/facebook_ads_tool.py` / `tools/linkedin_ads_tool.py`, wired through `agents/facebook_agent.py` / `agents/linkedin_agent.py` and the backend endpoints `/create-facebook-ad-campaign`, `/activate-facebook-ad-campaign`, `/create-linkedin-ad-campaign`, `/activate-linkedin-ad-campaign`.
+
+**This is a materially different feature than organic posting: it spends real money.** The safety model, enforced in code, not just convention:
+
+- Every campaign is created in a non-serving state — **`PAUSED`** at the campaign/ad set/ad level on Meta, **`DRAFT`** at the campaign group/campaign/creative level on LinkedIn — regardless of any input. There is no code path that creates a campaign any other way.
+- **Activation is a separate, explicit action, gated by a password checked server-side.** The UI shows the draft's ids and an estimated total spend (daily budget × days), and the "Activate campaign" button stays disabled until you type *something* into the execution-password field. The actual check happens in `backend/main.py` (`/activate-facebook-ad-campaign` / `/activate-linkedin-ad-campaign`, via `_check_execution_password()`) against `CAMPAIGN_EXECUTION_PASSWORD` — using `hmac.compare_digest` — so it can't be bypassed by calling the API directly, and it fails **closed**: if that env var isn't set, activation is blocked entirely, not silently allowed through.
+- The panel itself is hidden unless `ENABLE_PAID_PROMOTION=true` (read by the frontend directly — see `frontend/utils/api.env_flag()`).
+- LinkedIn's ad creative **reuses an existing organic post** (the one produced by clicking "Post to LinkedIn" above) rather than building new Direct Sponsored Content from scratch — simpler, and the UI won't offer to create a LinkedIn draft until you've posted organically first in that session.
+
+**Setup** — this needs its own API access, separate from (and more selective than) the organic-posting credentials already in `.env`:
+
+- **Meta**: the `ads_management` permission via Meta App Review, a funded Ad Account (`act_...`), and `FACEBOOK_AD_ACCOUNT_ID` + `FACEBOOK_MARKETING_ACCESS_TOKEN` in `.env` (falls back to `FACEBOOK_PAGE_TOKEN` if that token happens to also carry `ads_management`).
+- **LinkedIn**: the **Marketing Developer Platform** product (a distinct, more selective approval from plain `w_member_social` posting) with `rw_ads` scope, a funded Campaign Manager Ad Account, and `LINKEDIN_AD_ACCOUNT_ID` + `LINKEDIN_MARKETING_ACCESS_TOKEN` in `.env`.
+- `CAMPAIGN_EXECUTION_PASSWORD` — a shared secret for the "Activate campaign" action specifically (separate from all of the above). Leave blank and activation stays locked even with everything else configured.
+- `ENABLE_PAID_PROMOTION=true` to actually show the panel.
+
+Leave the ad-account settings blank to hide/skip the feature entirely — it fails with a clear "not configured" error rather than doing anything unexpected.
+
+> Not live-tested against a funded ad account (none was available to test against) — built and verified against Meta's and LinkedIn's current API docs, and the request/response wiring was confirmed against Meta's real Graph API (using the existing organic page token, which authenticated successfully but predictably lacks `ads_management` for a real campaign). Watch the first real draft-campaign creation closely on both platforms.
+
 ## Secrets
 
 Everything that used to be hardcoded in source (OpenAI key, AWS credentials, Facebook/Instagram/LinkedIn tokens) now lives in `.env`, which is gitignored. **Rotate every one of those credentials before this repo is ever pushed to a remote** — they were in plaintext in source for a period and should be treated as compromised.

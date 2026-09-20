@@ -41,3 +41,46 @@ class SwitchProviderRequest(BaseModel):
 class PostRequest(BaseModel):
     caption: str = ""
     image_url: str = ""
+
+
+class CreateFacebookAdRequest(BaseModel):
+    """Creates a draft (PAUSED) Meta ad campaign — see
+    tools/facebook_ads_tool.py. image_url is a local /static path, same
+    convention as PostRequest."""
+    name: str = ""
+    image_url: str = ""
+    message: str = ""
+    link: str = ""
+    daily_budget_usd: float = 0.0
+    countries: list[str] = ["US"]
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+
+
+class ActivateFacebookAdRequest(BaseModel):
+    campaign_id: str
+    adset_id: str
+    ad_id: str
+    # Checked against settings.campaign_execution_password server-side —
+    # this is the one call that spends real money.
+    password: str = ""
+
+
+class CreateLinkedInAdRequest(BaseModel):
+    """Creates a draft (DRAFT status) LinkedIn ad campaign promoting an
+    already-published post — see tools/linkedin_ads_tool.py."""
+    name: str = ""
+    share_urn: str = ""
+    daily_budget_usd: float = 0.0
+    country_code: str = "US"
+    start_time_ms: int = 0
+    end_time_ms: Optional[int] = None
+
+
+class ActivateLinkedInAdRequest(BaseModel):
+    campaign_group_urn: str
+    campaign_urn: str
+    creative_urn: str
+    # Checked against settings.campaign_execution_password server-side —
+    # this is the one call that spends real money.
+    password: str = ""
